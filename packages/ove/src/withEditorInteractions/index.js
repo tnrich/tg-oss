@@ -286,10 +286,54 @@ function VectorInteractionHOC(Component /* options */) {
         copyOptions,
         disableBpEditing,
         readOnly,
-        getAcceptedInsertChars,
+        getAcceptedInsertChars
       } = this.props;
+
+      let forceReverse;
+      if (!this.forceCopyAction && !sequenceData.isProtein) {
+        const isReverse = selectionLayer.forward === false;
+        if (isReverse) {
+          const pref = localStorage.getItem("ove_reverse_complement_preference");
+          if (pref === "always") {
+            this.forceCopyAction = "reverse";
+          } else if (pref === "never") {
+            this.forceCopyAction = "normal";
+          } else {
+            showDialog({
+              dialogType: "ReverseComplementDialog",
+              props: {
+                onConfirm: remember => {
+                  if (remember)
+                    localStorage.setItem(
+                      "ove_reverse_complement_preference",
+                      "always"
+                    );
+                  this.forceCopyAction = "reverse";
+                  document.execCommand("copy");
+                },
+                onCancel: remember => {
+                  if (remember)
+                    localStorage.setItem(
+                      "ove_reverse_complement_preference",
+                      "never"
+                    );
+                  this.forceCopyAction = "normal";
+                  document.execCommand("copy");
+                }
+              }
+            });
+            return;
+          }
+        }
+      }
+
+      if (this.forceCopyAction === "reverse") {
+        forceReverse = true;
+      }
+      this.forceCopyAction = null;
+
       const onCut = this.props.onCut || this.props.onCopy || noop;
-      const seqData = tidyUpSequenceData(
+      let seqData = tidyUpSequenceData(
         this.sequenceDataToCopy ||
           getSequenceDataBetweenRange(
             sequenceData,
@@ -315,6 +359,10 @@ function VectorInteractionHOC(Component /* options */) {
           getAcceptedInsertChars
         }
       );
+
+      if (forceReverse) {
+        seqData = getReverseComplementSequenceAndAnnotations(seqData);
+      }
 
       if (
         !(this.sequenceDataToCopy || {}).textToCopy &&
