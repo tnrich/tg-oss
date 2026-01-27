@@ -24,43 +24,77 @@ export default function addGapsToSeqReads(refSeq, seqReads) {
   const seqReadsWithGaps = [
     { name: refSeq.name, sequence: refSeqWithGaps.toUpperCase() }
   ];
-  seqReads.forEach(seqRead => {
-    // get all insertions in seq reads
-    const allInsertionsInSeqReads = [];
-    seqReads.forEach(seqRead => {
-      // split cigar string at S, M, D, or I (soft-clipped, match, deletion, or insertion), e.g. ["5S", "2M", "3I", "39M", "3D"..."9S"]
-      const splitSeqRead = seqRead.cigar.match(/([0-9]*[SMDI])/g);
-      // adjust seqRead.pos, aka bp pos where the seq read starts aligning to the ref seq, if bps have been soft-clipped from the beginning of the seq read
-      let adjustedSeqReadPos = cloneDeep(seqRead.pos);
-      if (splitSeqRead[0].slice(-1) === "S") {
-        // # in #S at beginning of array, i.e. number of soft-clipped base pairs at beginning of the seq read
-        const numOfBeginningSoftClipped = splitSeqRead[0].slice(0, -1);
-        adjustedSeqReadPos = seqRead.pos - numOfBeginningSoftClipped;
-      }
-      for (let componentI = 0; componentI < splitSeqRead.length; componentI++) {
-        if (splitSeqRead[componentI].slice(-1) === "I") {
-          let bpPosOfInsertion = adjustedSeqReadPos;
-          const numberOfInsertions = Number(
-            splitSeqRead[componentI].slice(0, -1)
-          );
-          for (let i = 0; i < componentI; i++) {
-            if (splitSeqRead[i].slice(-1) !== "I") {
-              const previousComponentNumber = Number(
-                splitSeqRead[i].slice(0, -1)
-              );
-              bpPosOfInsertion += previousComponentNumber;
-            }
-          }
-          const insertionInfo = {
-            // keeping bpPos 1-based
-            bpPos: bpPosOfInsertion,
-            number: numberOfInsertions
-          };
-          allInsertionsInSeqReads.push(insertionInfo);
-        }
-      }
-    });
 
+  // get all insertions in seq reads
+  const allInsertionsInSeqReads = [];
+  seqReads.forEach(innerSeqRead => {
+    // split cigar string at S, M, D, or I (soft-clipped, match, deletion, or insertion), e.g. ["5S", "2M", "3I", "39M", "3D"..."9S"]
+    const splitSeqRead = innerSeqRead.cigar.match(/([0-9]*[SMDI])/g);
+    // adjust innerSeqRead.pos, aka bp pos where the seq read starts aligning to the ref seq, if bps have been soft-clipped from the beginning of the seq read
+    let adjustedSeqReadPos = cloneDeep(innerSeqRead.pos);
+    if (splitSeqRead[0].slice(-1) === "S") {
+      // # in #S at beginning of array, i.e. number of soft-clipped base pairs at beginning of the seq read
+      const numOfBeginningSoftClipped = splitSeqRead[0].slice(0, -1);
+      adjustedSeqReadPos = innerSeqRead.pos - numOfBeginningSoftClipped;
+    }
+    for (let componentI = 0; componentI < splitSeqRead.length; componentI++) {
+      if (splitSeqRead[componentI].slice(-1) === "I") {
+        let bpPosOfInsertion = adjustedSeqReadPos;
+        const numberOfInsertions = Number(
+          splitSeqRead[componentI].slice(0, -1)
+        );
+        for (let i = 0; i < componentI; i++) {
+          if (splitSeqRead[i].slice(-1) !== "I") {
+            const previousComponentNumber = Number(
+              splitSeqRead[i].slice(0, -1)
+            );
+            bpPosOfInsertion += previousComponentNumber;
+          }
+        }
+        const insertionInfo = {
+          // keeping bpPos 1-based
+          bpPos: bpPosOfInsertion,
+          number: numberOfInsertions
+        };
+        allInsertionsInSeqReads.push(insertionInfo);
+      }
+    }
+  });
+
+  let allUniqueInsertions = allInsertionsInSeqReads.sort((a, b) => {
+    return a.bpPos - b.bpPos;
+  });
+
+  // first, combine duplicates within all insertions
+  const seenInsertions = new Set();
+  allUniqueInsertions = allUniqueInsertions.filter(obj => {
+    const key = `${obj.bpPos}-${obj.number}`;
+    if (seenInsertions.has(key)) {
+      return false;
+    }
+    seenInsertions.add(key);
+    return true;
+  });
+
+  // 'i < allUniqueInsertions.length - 1' because when at the end of the array, there is no 'i + 1' to compare to
+  for (let i = 0; i < allUniqueInsertions.length - 1; i++) {
+    while (allUniqueInsertions[i].bpPos === allUniqueInsertions[i + 1].bpPos) {
+      if (allUniqueInsertions[i].number > allUniqueInsertions[i + 1].number) {
+        // remove the one with fewer number of gaps from array
+        allUniqueInsertions.splice(i + 1, 1);
+      } else if (
+        allUniqueInsertions[i].number < allUniqueInsertions[i + 1].number
+      ) {
+        allUniqueInsertions.splice(i, 1);
+      } else if (
+        allUniqueInsertions[i].number === allUniqueInsertions[i + 1].number
+      ) {
+        allUniqueInsertions.splice(i, 1);
+      }
+    }
+  }
+
+  seqReads.forEach(seqRead => {
     // 1) add gaps before starting bp pos
     const splitSeqReadChunk = seqRead.cigar.match(/([0-9]*[SMDI])/g);
     let adjustedSeqReadPos = cloneDeep(seqRead.pos);
@@ -181,33 +215,7 @@ export default function addGapsToSeqReads(refSeq, seqReads) {
 
     // 4) add other seq reads' insertions to seq read
     // get other seq reads' insertions (i.e. all insertions minus duplicates minus own insertions)
-    let otherInsertions = allInsertionsInSeqReads.sort((a, b) => {
-      return a.bpPos - b.bpPos;
-    });
-    // combine duplicates within all insertions, remove own insertions from all insertions, combine overlap between other insertions & own insertions
-    // first, combine duplicates within all insertions
-    otherInsertions = otherInsertions.filter(
-      (object, index) =>
-        index ===
-        otherInsertions.findIndex(
-          obj => JSON.stringify(obj) === JSON.stringify(object)
-        )
-    );
-    // 'i < otherInsertions.length - 1' because when at the end of the array, there is no 'i + 1' to compare to
-    for (let i = 0; i < otherInsertions.length - 1; i++) {
-      while (otherInsertions[i].bpPos === otherInsertions[i + 1].bpPos) {
-        if (otherInsertions[i].number > otherInsertions[i + 1].number) {
-          // remove the one with fewer number of gaps from array
-          otherInsertions.splice(i + 1, 1);
-        } else if (otherInsertions[i].number < otherInsertions[i + 1].number) {
-          otherInsertions.splice(i, 1);
-        } else if (
-          otherInsertions[i].number === otherInsertions[i + 1].number
-        ) {
-          otherInsertions.splice(i, 1);
-        }
-      }
-    }
+    let otherInsertions = cloneDeep(allUniqueInsertions);
     // then remove own insertions from all insertions
     for (let otherI = 0; otherI < ownInsertionsCompare.length; otherI++) {
       const insertionInfoIndex = otherInsertions.findIndex(
