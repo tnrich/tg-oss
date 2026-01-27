@@ -157,6 +157,7 @@ export default function validateSequence(sequence, options = {}) {
     sequence.features = [];
   }
   //tnr: maybe this should be wrapped in its own function (in case we want to use it elsewhere)
+  const validFeatureTypes = getFeatureTypes({ includeHidden: true });
   sequence.features = sequence.features.filter(function (feature) {
     if (!feature || typeof feature !== "object") {
       response.messages.push("Invalid feature detected and removed");
@@ -243,7 +244,7 @@ export default function validateSequence(sequence, options = {}) {
     if (
       !feature.type ||
       typeof feature.type !== "string" ||
-      !getFeatureTypes({ includeHidden: true }).some(function (featureType) {
+      !validFeatureTypes.some(function (featureType) {
         if (featureType.toLowerCase() === feature.type.toLowerCase()) {
           feature.type = featureType; //this makes sure the feature.type is being set to the exact value of the accepted featureType
           return true;
