@@ -14,6 +14,13 @@
 
 .veMismatchLayer {
   z-index: 11; /* Ensure mismatch layers appear on top of normal selection layer */
+  background: red;
+  opacity: 0.5;
+}
+
+.bp3-dark .veMismatchLayer {
+  background: red;
+  opacity: 1;
 }
 
 .veCaret {
