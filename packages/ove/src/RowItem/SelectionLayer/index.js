@@ -205,9 +205,7 @@ function SelectionLayer(props) {
                     left: leftMargin + xStart + pos * charWidth,
                     top: 0,
                     height: height || "100%",
-                    background: "red",
-                    position: "absolute",
-                    opacity: 0.5
+                    position: "absolute"
                   }}
                 ></div>
               ));

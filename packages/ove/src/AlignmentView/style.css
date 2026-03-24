@@ -103,6 +103,10 @@
 .minimapLane.lane-hovered .miniBluePath {
   fill: rgb(169, 169, 245) !important;
 }
+.bp3-dark .miniRedPath {
+  fill: red !important;
+  opacity: 1;
+}
 .minimapLane.isTrackSelected .miniBluePath {
   fill: rgb(137, 168, 255) !important;
   stroke: rgb(0, 0, 0);
