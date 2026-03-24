@@ -1,7 +1,8 @@
 import {
   getSequenceDataBetweenRange,
   tidyUpSequenceData,
-  getAminoAcidStringFromSequenceString
+  getAminoAcidStringFromSequenceString,
+  getReverseComplementSequenceString
 } from "@teselagen/sequence-utils";
 import { getSequenceWithinRange } from "@teselagen/range-utils";
 import Clipboard from "clipboard";
@@ -276,97 +277,198 @@ function VectorInteractionHOC(Component /* options */) {
       e.preventDefault();
     };
 
-    handleCutOrCopy = _isCut => async e => {
-      const isCut = _isCut || this.isCut || false;
-      e.preventDefault();
-      const {
-        onCopy = noop,
-        sequenceData,
-        selectionLayer,
-        copyOptions,
-        disableBpEditing,
-        readOnly,
-        getAcceptedInsertChars,
-      } = this.props;
-      const onCut = this.props.onCut || this.props.onCopy || noop;
-      const seqData = tidyUpSequenceData(
-        this.sequenceDataToCopy ||
-          getSequenceDataBetweenRange(
-            sequenceData,
-            getSelFromWrappedAddon(
-              selectionLayer,
-              sequenceData.sequence.length
-            ),
-            {
-              excludePartial: {
-                features: !copyOptions.partialFeatures,
-                parts: !copyOptions.partialParts
-              },
-              exclude: {
-                features: !copyOptions.features,
-                parts: !copyOptions.parts
-              }
-            }
-          ),
-        {
-          doNotRemoveInvalidChars: true,
-          annotationsAsObjects: true,
-          includeProteinSequence: true,
+    handleCutOrCopy =
+      ({ _isCut, noCheck, _forceReverse } = {}) =>
+      async e => {
+        const isCut = _isCut || this.isCut || false;
+        e.preventDefault();
+        const {
+          onCopy = noop,
+          sequenceData,
+          selectionLayer,
+          copyOptions,
+          disableBpEditing,
+          readOnly,
           getAcceptedInsertChars
+        } = this.props;
+
+        let forceReverse = _forceReverse;
+        if (!this.forceCopyAction && !sequenceData.isProtein && !noCheck) {
+          const isReverse = selectionLayer.forward === false;
+          if (isReverse) {
+            const pref = localStorage.getItem(
+              "ove_reverse_complement_preference"
+            );
+            if (pref === "always") {
+              this.forceCopyAction = "reverse";
+            } else if (pref === "never") {
+              this.forceCopyAction = "normal";
+            } else {
+              document.removeEventListener("copy", this.handleCopy);
+              document.removeEventListener("cut", this.handleCut);
+
+              showDialog({
+                dialogType: "ReverseComplementDialog",
+                props: {
+                  onConfirm: remember => {
+                    if (remember)
+                      localStorage.setItem(
+                        "ove_reverse_complement_preference",
+                        "always"
+                      );
+                    this.forceCopyAction = "reverse";
+                    document.addEventListener(
+                      "cut",
+                      this.handleCutForceReverse,
+                      {
+                        once: true
+                      }
+                    );
+                    document.addEventListener(
+                      "copy",
+                      this.handleCopyForceReverse,
+                      {
+                        once: true
+                      }
+                    );
+                    document.execCommand("copy");
+                  },
+                  onCancel: remember => {
+                    if (remember)
+                      localStorage.setItem(
+                        "ove_reverse_complement_preference",
+                        "never"
+                      );
+                    document.addEventListener("cut", this.handleCutForce, {
+                      once: true
+                    });
+                    document.addEventListener("copy", this.handleCopyForce, {
+                      once: true
+                    });
+                    this.forceCopyAction = "normal";
+                    document.execCommand("copy");
+                  }
+                }
+              });
+              return;
+            }
+          }
         }
-      );
+        if (this.forceCopyAction === "reverse") {
+          forceReverse = true;
+        }
+        this.forceCopyAction = null;
 
-      if (
-        !(this.sequenceDataToCopy || {}).textToCopy &&
-        !seqData.sequence.length
-      )
-        return window.toastr.warning(
-          `No Sequence Selected To ${
-            isCut && !(readOnly || disableBpEditing) ? "Cut" : "Copy"
-          }`
-        );
-
-      const textToCopy =
-        (this.sequenceDataToCopy || {}).textToCopy !== undefined
-          ? this.sequenceDataToCopy.textToCopy
-          : seqData.isProtein
-            ? seqData.proteinSequence
-            : seqData.sequence;
-
-      seqData.textToCopy = textToCopy;
-      e.clipboardData.setData("text/plain", textToCopy);
-      e.clipboardData.setData("application/json", JSON.stringify(seqData));
-      e.preventDefault();
-
-      if (isCut && !(readOnly || disableBpEditing) && !disableBpEditing) {
-        this.handleDnaDelete(false);
-        onCut(
-          e,
-          tidyUpSequenceData(seqData, {
+        const onCut = this.props.onCut || this.props.onCopy || noop;
+        let seqData = tidyUpSequenceData(
+          this.sequenceDataToCopy ||
+            getSequenceDataBetweenRange(
+              sequenceData,
+              getSelFromWrappedAddon(
+                selectionLayer,
+                sequenceData.sequence.length
+              ),
+              {
+                excludePartial: {
+                  features: !copyOptions.partialFeatures,
+                  parts: !copyOptions.partialParts
+                },
+                exclude: {
+                  features: !copyOptions.features,
+                  parts: !copyOptions.parts
+                }
+              }
+            ),
+          {
             doNotRemoveInvalidChars: true,
             annotationsAsObjects: true,
+            includeProteinSequence: true,
             getAcceptedInsertChars
-          }),
-          this.props
+          }
         );
-      } else {
-        onCopy(e, seqData, this.props);
-      }
-      document.body.removeEventListener("cut", this.handleCut);
-      document.body.removeEventListener("copy", this.handleCopy);
-      window.toastr.success(
-        `Selection ${
-          isCut && !(readOnly || disableBpEditing) && !disableBpEditing
-            ? "Cut"
-            : "Copied"
-        }`
-      );
-      this.sequenceDataToCopy = undefined;
-    };
 
-    handleCut = this.handleCutOrCopy(true);
+        if (forceReverse) {
+          seqData = getReverseComplementSequenceAndAnnotations(seqData);
+          if ((this.sequenceDataToCopy || {}).textToCopy) {
+            this.sequenceDataToCopy.textToCopy =
+              getReverseComplementSequenceString(
+                this.sequenceDataToCopy.textToCopy
+              );
+          }
+        }
 
+        if (
+          !(this.sequenceDataToCopy || {}).textToCopy &&
+          !seqData.sequence.length
+        )
+          return window.toastr.warning(
+            `No Sequence Selected To ${
+              isCut && !(readOnly || disableBpEditing) ? "Cut" : "Copy"
+            }`
+          );
+
+        const textToCopy =
+          (this.sequenceDataToCopy || {}).textToCopy !== undefined
+            ? this.sequenceDataToCopy.textToCopy
+            : seqData.isProtein
+              ? seqData.proteinSequence
+              : seqData.sequence;
+
+        seqData.textToCopy = textToCopy;
+        e.clipboardData.setData("text/plain", textToCopy);
+        e.clipboardData.setData("application/json", JSON.stringify(seqData));
+        e.preventDefault();
+
+        if (isCut && !(readOnly || disableBpEditing) && !disableBpEditing) {
+          this.handleDnaDelete(false);
+          onCut(
+            e,
+            tidyUpSequenceData(seqData, {
+              doNotRemoveInvalidChars: true,
+              annotationsAsObjects: true,
+              getAcceptedInsertChars
+            }),
+            this.props
+          );
+        } else {
+          onCopy(e, seqData, this.props);
+        }
+        document.body.removeEventListener("cut", this.handleCut);
+        document.body.removeEventListener("copy", this.handleCopy);
+        document.body.removeEventListener("cut", this.handleCutForceReverse);
+        document.body.removeEventListener("copy", this.handleCopyForceReverse);
+        document.body.removeEventListener("cut", this.handleCutForce);
+        document.body.removeEventListener("copy", this.handleCopyForce);
+        window.toastr.success(
+          `Selection ${
+            isCut && !(readOnly || disableBpEditing) && !disableBpEditing
+              ? "Cut"
+              : "Copied"
+          }`
+        );
+        this.sequenceDataToCopy = undefined;
+      };
+
+    handleCut = this.handleCutOrCopy({
+      _isCut: true
+    });
     handleCopy = this.handleCutOrCopy();
+    handleCutForceReverse = this.handleCutOrCopy({
+      _isCut: true,
+      _forceReverse: true,
+      _noCheck: true
+    });
+    handleCopyForceReverse = this.handleCutOrCopy({
+      _forceReverse: true,
+      _noCheck: true
+    });
+    handleCutForce = this.handleCutOrCopy({
+      _isCut: true,
+      _noCheck: true
+    });
+    handleCopyForce = this.handleCutOrCopy({
+      _noCheck: true
+    });
 
     getDuplicateAction = () => {
       if (!this.props.onDuplicate) {
@@ -947,6 +1049,7 @@ function VectorInteractionHOC(Component /* options */) {
         isFromRowView: !!event?.target?.closest(".veRowView"),
         start: annotation.start,
         end: annotation.end,
+        forward: annotation.forward,
         isWrappedAddon: annotation.isWrappedAddon,
         overlapsSelf: annotation.overlapsSelf
       });
@@ -963,6 +1066,7 @@ function VectorInteractionHOC(Component /* options */) {
       ({ annotation, event }) => {
         this.props.selectionLayerUpdate({
           isFromRowView: !!event?.target?.closest(".veRowView"),
+          forward: annotation.forward,
           start: annotation.start,
           end: annotation.end
         });
@@ -988,6 +1092,7 @@ function VectorInteractionHOC(Component /* options */) {
       ({ annotation, event }) => {
         this.props.selectionLayerUpdate({
           isFromRowView: !!event?.target?.closest(".veRowView"),
+          forward: annotation.forward,
           start: annotation.start,
           end: annotation.end
         });
@@ -1066,6 +1171,7 @@ function VectorInteractionHOC(Component /* options */) {
       ({ annotation, event }) => {
         this.props.selectionLayerUpdate({
           isFromRowView: !!event?.target?.closest(".veRowView"),
+          forward: annotation.forward,
           start: annotation.start,
           end: annotation.end
         });
@@ -1081,6 +1187,7 @@ function VectorInteractionHOC(Component /* options */) {
     orfRightClicked = this.enhanceRightClickAction(({ annotation, event }) => {
       this.props.selectionLayerUpdate({
         isFromRowView: !!event?.target?.closest(".veRowView"),
+        forward: annotation.forward,
         start: annotation.start,
         end: annotation.end
       });
@@ -1097,6 +1204,7 @@ function VectorInteractionHOC(Component /* options */) {
         const { annotationVisibilityToggle } = this.props;
         this.props.selectionLayerUpdate({
           isFromRowView: !!event?.target?.closest(".veRowView"),
+          forward: annotation.forward,
           start: annotation.start,
           end: annotation.end
         });

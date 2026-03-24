@@ -448,6 +448,7 @@ export function updateSelectionOrCaret({
       isWrappedAddon: newRangeOrCaret.isWrappedAddon
     };
   }
+
   if (shiftHeld) {
     if (caretPosition > 0) {
       //there is a caret already down
@@ -527,11 +528,11 @@ export function updateSelectionOrCaret({
 
         if (newRangeFullyContained) {
           range1Shorter
-            ? selectionLayerUpdate(range1)
-            : selectionLayerUpdate(range2);
+            ? selectionLayerUpdate({ ...newRange, ...range1 })
+            : selectionLayerUpdate({ ...newRange, ...range2 });
         } else {
           selectionLayerUpdate({
-            forward: newRange.forward,
+            ...newRange,
             start: selectionLayer.start,
             end: newRange.end
           });
