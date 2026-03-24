@@ -19,7 +19,7 @@
     "@jscutlery/semver": "^5.2.2",
     "@nx/cypress": "20.4.6",
     "@nx/esbuild": "20.4.6",
-    "@nx/eslint-plugin": "^20.4.6",
+    "@nx/eslint-plugin": "20.4.6",
     "@nx/js": "20.4.6",
     "@nx/react": "20.4.6",
     "@nx/vite": "20.4.6",
@@ -39,6 +39,7 @@
     "@typescript-eslint/eslint-plugin": "^5.60.1",
     "@typescript-eslint/parser": "^5.60.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "ajv": "^8.17.1",
     "biomsa": "^0.2.4",
     "chai": "^5.2.0",
     "chai-dom": "^1.12.1",
@@ -81,7 +82,6 @@
     "packages/*"
   ],
   "volta": {
-    "node": "18.18.0",
-    "yarn": "1.22.21"
+    "node": "18.18.0"
   }
 }
