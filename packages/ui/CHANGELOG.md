@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.23 (2026-05-05)
+
+- fix: add data-test-value to select to help w testing
+- fix: remove Loading component completely from table when loading is false
+
 ## 0.10.22 (2026-04-29)
 
 - feat: added tag input class name support to TgSelectMulti

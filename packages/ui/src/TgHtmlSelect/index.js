@@ -6,6 +6,7 @@ import classNames from "classnames";
 // look like a regular html select with the selected option displayed
 // (instead of greyed out and without the ability to have tooltips working)
 const TgHTMLSelect = ({ disabled, ...rest }) => {
+  rest["data-test-value"] = rest.value;
   if (disabled) {
     const opt = rest.options.find(o => o.value === rest.value);
     return (
